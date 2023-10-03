@@ -18,4 +18,19 @@ fun main(args: Array<String>) {
     var output = gson.toJson(colors)
 
     println(output);
+
+    // JSON to Gson
+    var jsonString = "{\"firstName\":\"Tom\", \"lastName\": \"Broody\"}";
+
+    var user = gson.fromJson(jsonString, User::class.java)
+    println(user);
 }
+
+class User(var firstName: String, var lastName: String) {
+    override fun toString(): String {
+        return "${this.javaClass.name} [firstName = $firstName, lastName = $lastName]"
+    }
+}
+
+
+
