@@ -1,43 +1,56 @@
+import com.github.kittinunf.fuel.Fuel
 import com.github.kittinunf.fuel.core.ResponseDeserializable
+import com.github.kittinunf.fuel.gson.responseObject
 import com.github.kittinunf.fuel.httpGet
 import com.github.kittinunf.result.failure
 import com.github.kittinunf.result.success
-import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.TypeAdapter
 import com.google.gson.annotations.SerializedName
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
-import java.text.DateFormat
 import java.time.LocalDate
-import java.util.Date
-
-const val urlWebPage =
-    "https://api.openweathermap.org/data/3.0/onecall/day_summary?lat=51.5072&lon=0.1276&date=2024-01-14&appid=2ffa4cf4ffc5e064e73d6fef24da867f&units=metric";
 
 fun main(args: Array<String>) {
-    println("Hello mom!")
+    val cityName = "London"
+    val geo: GeoLocation? = makeRequestGeocode(cityName)
 
-    var responseWeatherObject =
-        urlWebPage.httpGet().responseObject(CurrentWeather.Deserializer()) { _, _, result ->
-            println("Hello there")
+    println("Gelocation after making the request to the API: $geo")
 
-            result.failure {
-                println("Failure: " + result.get())
+    if (geo != null) {
+        makeRequestWeatherData(geo)
+    } else {
+        makeRequestWeatherData(GeoLocation(emptyArray()))
+    }
+}
+
+fun makeRequestGeocode(cityName: String): GeoLocation? {
+    var responseGeoLocation: GeoLocation? = null;
+
+    var geoLocation = prepareURLGeoCode(cityName)
+        .httpGet()
+        .responseObject<GeoLocation> { _, _, result ->
+            result.success {
+                responseGeoLocation = result.get();
+
+                println("Cityname: $cityName's geolocation received! $responseGeoLocation")
             }
 
-            result.success {
-                val data = result.get()
-                println("API response: $data")
+            result.failure {
+                println("Failure finding the city. Or there might be other issue!")
+                println(result.get())
             }
         }.get()
 
+    println("returning $responseGeoLocation")
+    return responseGeoLocation
+}
 
-    var responseWeatherString =
-        urlWebPage.httpGet().responseString { _, _, result ->
-            println("Hello there")
-
+fun makeRequestWeatherData(geoLocation: GeoLocation) {
+    var responseWeatherObject = prepareURLWeatherData(geoLocation)
+            .httpGet()
+            .responseObject (CurrentWeather.Deserializer()) { _, _, result ->
             result.failure {
                 println("Failure: " + result.get())
             }
@@ -48,6 +61,69 @@ fun main(args: Array<String>) {
             }
         }.get()
 }
+
+fun prepareURLWeatherData(geoLocation: GeoLocation): String {
+    var lon: Double? = 0.0;
+    var lat: Double? = 0.0;
+
+    if (geoLocation.results.isNotEmpty()) {
+        lon = geoLocation.results[0].geometry.lng
+        lat = geoLocation.results[0].geometry.lat
+        println("lon is => $lon")
+        println("lat is => $lat")
+    }
+
+    val urlWeatherAPIRequest =
+        "https://api.openweathermap.org/data/3.0/onecall/day_summary?lat=${lat}&lon=${lon}&date=2024-01-22&appid=2ffa4cf4ffc5e064e73d6fef24da867f&units=metric";
+
+    return urlWeatherAPIRequest
+}
+
+fun prepareURLGeoCode(city: String): String {
+    val urlGeocodeAPIRequest =
+        "https://api.opencagedata.com/geocode/v1/json?q=${city}&key=39ace01f26ab4c77b1f31ae37e526b3f&limit=1&no_annotations=1&pretty=1";
+
+    return urlGeocodeAPIRequest
+}
+
+data class GeoLocation(
+    @SerializedName(value = "results")
+    val results: Array<GeoResults>
+) {
+    class Deserializer : ResponseDeserializable<GeoLocation> {
+        override fun deserialize(content: String): GeoLocation =
+            GsonBuilder()
+                .setPrettyPrinting()
+                .create()
+                .fromJson(content, GeoLocation::class.java)
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as GeoLocation
+
+        return results.contentEquals(other.results)
+    }
+
+    override fun hashCode(): Int {
+        return results.contentHashCode()
+    }
+}
+
+data class GeoResults(
+    @SerializedName(value = "geometry")
+    var geometry: Geometry
+)
+
+data class Geometry(
+    @SerializedName(value = "lat")
+    var lat: Double,
+
+    @SerializedName(value = "lng")
+    var lng: Double
+)
 
 data class CurrentWeather(
     @SerializedName(value = "lat")
@@ -71,7 +147,6 @@ data class CurrentWeather(
     @SerializedName(value = "wind")
     var wind: Wind? = null
 ) {
-
     class Deserializer : ResponseDeserializable<CurrentWeather> {
         override fun deserialize(content: String): CurrentWeather =
             GsonBuilder()
